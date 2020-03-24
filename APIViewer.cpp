@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "TypeSystem/TypeSystem.h"
 
 struct FUNCTION
 {
@@ -13,7 +14,21 @@ struct FUNCTION
     std::vector<std::string> params;
 };
 
+struct TYPE
+{
+    std::string name;
+    CR_TypeID tid;
+};
+
+enum ENTITY_TYPE
+{
+    ET_FUNCTION,
+    ET_TYPE
+};
+
 static std::map<std::string, FUNCTION> s_functions;
+static std::map<std::string, TYPE> s_types;
+static CR_NameScope *s_pns = NULL;
 
 template <typename t_string_container, 
           typename t_string = typename t_string_container::value_type>
@@ -29,6 +44,22 @@ void split(t_string_container& container,
         j = str.find(sep, i);
     }
     container.emplace_back(std::move(str.substr(i, -1)));
+}
+
+template <typename t_string>
+bool replace_string(t_string& str, const t_string& from, const t_string& to) {
+    bool ret = false;
+    size_t i = 0;
+    for (;;) {
+        i = str.find(from, i);
+        if (i == t_string::npos)
+            break;
+
+        str.replace(i, from.size(), to);
+        i += to.size();
+        ret = true;
+    }
+    return ret;
 }
 
 std::string DoDumpFunction(const FUNCTION& fn)
@@ -62,6 +93,59 @@ std::string DoDumpFunction(const FUNCTION& fn)
     return ret;
 }
 
+std::string DoDumpType(const TYPE& st)
+{
+    std::string ret, name = st.name;
+
+    auto tid = s_pns->TypeIDFromName(st.name);
+    if (tid == cr_invalid_id)
+        return "";
+    auto& type = s_pns->LogType(tid);
+
+    auto rtid = s_pns->ResolveAlias(tid);
+    if (rtid == cr_invalid_id)
+        return "";
+    auto& rtype = s_pns->LogType(rtid);
+
+    if (rtype.m_flags & TF_STRUCT)
+    {
+        if (tid != rtid)
+        {
+            ret += "typedef ";
+            ret += CrTabToSpace(s_pns->StringOfType(rtid, st.name, true));
+            ret += ";\n";
+        }
+        else
+        {
+            ret += CrTabToSpace(s_pns->StringOfType(tid, "", true));
+            ret += ";\n";
+        }
+    }
+    else if (rtype.m_flags & TF_UNION)
+    {
+        if (tid != rtid)
+        {
+            ret += "typedef ";
+            ret += CrTabToSpace(s_pns->StringOfType(rtid, name, true));
+            ret += ";\n";
+        }
+        else
+        {
+            ret += CrTabToSpace(s_pns->StringOfType(tid, "", true));
+            ret += ";\n";
+        }
+    }
+    else
+    {
+        ret += "typedef ";
+        ret += CrTabToSpace(s_pns->StringOfType(tid, name, true));
+        ret += ";\n";
+    }
+
+    replace_string(ret, std::string("\n"), std::string("\r\n"));
+    return ret;
+}
+
 BOOL GetWondersDirectory(LPWSTR pszPath, INT cchPath)
 {
     WCHAR szDir[MAX_PATH], szPath[MAX_PATH];
@@ -89,6 +173,28 @@ BOOL GetWondersDirectory(LPWSTR pszPath, INT cchPath)
     }
 
     lstrcpynW(pszPath, szPath, cchPath);
+    return TRUE;
+}
+
+BOOL DoLoadTypes(void)
+{
+    s_types.clear();
+
+    auto& map = s_pns->MapNameToTypeID();
+    for (auto& pair : map)
+    {
+        auto tid = pair.second;
+        if (tid == cr_invalid_id)
+            continue;
+
+        TYPE type;
+        type.name = pair.first;
+        type.tid = tid;
+        if (type.name.find('*') != std::string::npos)
+            continue;
+
+        s_types.insert(std::make_pair(type.name, type));
+    }
     return TRUE;
 }
 
@@ -135,10 +241,19 @@ BOOL OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
     }
     PathAddBackslashW(szPath);
 
+    CHAR szPathA[MAX_PATH];
+    WideCharToMultiByte(CP_ACP, 0, szPath, -1, szPathA, MAX_PATH, NULL, NULL);
+
 #ifdef _WIN64
-    if (!DoLoadFunctions(szPath, L"-cl-64-w.dat"))
+    s_pns = new CR_NameScope(std::make_shared<CR_ErrorInfo>(), true);
+    if (!s_pns->LoadFromFiles(szPathA, "-cl-64-w.dat") ||
+        !DoLoadFunctions(szPath, L"-cl-64-w.dat") ||
+        !DoLoadTypes())
 #else
-    if (!DoLoadFunctions(szPath, L"-cl-32-w.dat"))
+    s_pns = new CR_NameScope(std::make_shared<CR_ErrorInfo>(), false);
+    if (!s_pns->LoadFromFiles(szPathA, "-cl-32-w.dat") ||
+        !DoLoadFunctions(szPath, L"-cl-32-w.dat") ||
+        !DoLoadTypes())
 #endif
     {
         MessageBoxW(hwnd, L"Cannot load Wonders.", NULL, MB_ICONERROR);
@@ -149,7 +264,8 @@ BOOL OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
     SendDlgItemMessageW(hwnd, cmb1, CB_ADDSTRING, 0, (LPARAM)L"C/C++");
     SendDlgItemMessageW(hwnd, cmb1, CB_SETCURSEL, 0, 0);
 
-    SendDlgItemMessageW(hwnd, cmb2, CB_ADDSTRING, 0, (LPARAM)L"Function");
+    SendDlgItemMessageW(hwnd, cmb2, CB_ADDSTRING, 0, (LPARAM)L"Functions");
+    SendDlgItemMessageW(hwnd, cmb2, CB_ADDSTRING, 0, (LPARAM)L"Types");
     SendDlgItemMessageW(hwnd, cmb2, CB_SETCURSEL, 0, 0);
 
     for (auto& pair : s_functions)
@@ -160,19 +276,26 @@ BOOL OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
     return TRUE;
 }
 
-void OnEdt1(HWND hwnd)
+void DoUpdateList(HWND hwnd, ENTITY_TYPE iType, LPCWSTR pszText)
 {
-    WCHAR szTextW[128];
-    GetDlgItemTextW(hwnd, edt1, szTextW, ARRAYSIZE(szTextW));
-    StrTrimW(szTextW, L" \t\r\n");
-
     SendDlgItemMessageW(hwnd, lst1, LB_RESETCONTENT, 0, 0);
 
-    if (szTextW[0] == 0)
+    if (pszText[0] == 0)
     {
-        for (auto& pair : s_functions)
+        switch (iType)
         {
-            SendDlgItemMessageA(hwnd, lst1, LB_ADDSTRING, 0, (LPARAM)pair.first.c_str());
+        case ET_FUNCTION:
+            for (auto& pair : s_functions)
+            {
+                SendDlgItemMessageA(hwnd, lst1, LB_ADDSTRING, 0, (LPARAM)pair.first.c_str());
+            }
+            break;
+        case ET_TYPE:
+            for (auto& pair : s_types)
+            {
+                SendDlgItemMessageA(hwnd, lst1, LB_ADDSTRING, 0, (LPARAM)pair.first.c_str());
+            }
+            break;
         }
 
         if (SendDlgItemMessageW(hwnd, lst1, LB_GETCOUNT, 0, 0) == 1)
@@ -183,14 +306,28 @@ void OnEdt1(HWND hwnd)
     }
 
     CHAR szTextA[128];
-    WideCharToMultiByte(CP_ACP, 0, szTextW, -1, szTextA, ARRAYSIZE(szTextA), NULL, NULL);
+    WideCharToMultiByte(CP_ACP, 0, pszText, -1, szTextA, ARRAYSIZE(szTextA), NULL, NULL);
 
-    for (auto& pair : s_functions)
+    switch (iType)
     {
-        if (pair.first.find(szTextA) == 0)
+    case ET_FUNCTION:
+        for (auto& pair : s_functions)
         {
-            SendDlgItemMessageA(hwnd, lst1, LB_ADDSTRING, 0, (LPARAM)pair.first.c_str());
+            if (pair.first.find(szTextA) == 0)
+            {
+                SendDlgItemMessageA(hwnd, lst1, LB_ADDSTRING, 0, (LPARAM)pair.first.c_str());
+            }
         }
+        break;
+    case ET_TYPE:
+        for (auto& pair : s_types)
+        {
+            if (pair.first.find(szTextA) == 0)
+            {
+                SendDlgItemMessageA(hwnd, lst1, LB_ADDSTRING, 0, (LPARAM)pair.first.c_str());
+            }
+        }
+        break;
     }
 
     if (SendDlgItemMessageW(hwnd, lst1, LB_GETCOUNT, 0, 0) == 1)
@@ -199,16 +336,34 @@ void OnEdt1(HWND hwnd)
     }
 }
 
+void OnEdt1(HWND hwnd)
+{
+    INT iType = (INT)SendDlgItemMessageW(hwnd, cmb2, CB_GETCURSEL, 0, 0);
+
+    WCHAR szTextW[128];
+    GetDlgItemTextW(hwnd, edt1, szTextW, ARRAYSIZE(szTextW));
+    StrTrimW(szTextW, L" \t\r\n");
+
+    DoUpdateList(hwnd, (ENTITY_TYPE)iType, szTextW);
+}
+
 void OnCmb1(HWND hwnd)
 {
 }
 
 void OnCmb2(HWND hwnd)
 {
+    INT iType = (INT)SendDlgItemMessageW(hwnd, cmb2, CB_GETCURSEL, 0, 0);
+
+    SetDlgItemTextW(hwnd, edt1, NULL);
+
+    DoUpdateList(hwnd, (ENTITY_TYPE)iType, L"");
 }
 
 void OnAdd(HWND hwnd)
 {
+    INT iType = (INT)SendDlgItemMessageW(hwnd, cmb2, CB_GETCURSEL, 0, 0);
+
     INT i, nCount = (INT)SendDlgItemMessageW(hwnd, lst1, LB_GETCOUNT, 0, 0);
     if (nCount == 0)
         return;
@@ -221,12 +376,26 @@ void OnAdd(HWND hwnd)
     CHAR szItem[128];
     SendDlgItemMessageA(hwnd, lst1, LB_GETTEXT, i, (LPARAM)szItem);
 
-    auto it = s_functions.find(szItem);
-    if (it == s_functions.end())
-        return;
-
     std::string str;
-    str = DoDumpFunction(it->second);
+    switch ((ENTITY_TYPE)iType)
+    {
+    case ET_FUNCTION:
+        {
+            auto it = s_functions.find(szItem);
+            if (it == s_functions.end())
+                return;
+            str = DoDumpFunction(it->second);
+        }
+        break;
+    case ET_TYPE:
+        {
+            auto it = s_types.find(szItem);
+            if (it == s_types.end())
+                return;
+            str = DoDumpType(it->second);
+        }
+        break;
+    }
 
     INT cchText = GetWindowTextLengthA(GetDlgItem(hwnd, edt2));
     SendDlgItemMessageA(hwnd, edt2, EM_SETSEL, cchText, cchText);
@@ -270,13 +439,20 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
     switch (id)
     {
     case IDCANCEL:
+        delete s_pns;
         EndDialog(hwnd, id);
         break;
     case cmb1:
-        OnCmb1(hwnd);
+        if (codeNotify == CBN_SELCHANGE)
+        {
+            OnCmb1(hwnd);
+        }
         break;
     case cmb2:
-        OnCmb2(hwnd);
+        if (codeNotify == CBN_SELCHANGE)
+        {
+            OnCmb2(hwnd);
+        }
         break;
     case edt1:
         if (codeNotify == EN_CHANGE)

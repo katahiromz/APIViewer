@@ -6,6 +6,10 @@
 # CMake minimum version
 cmake_minimum_required(VERSION 2.4)
 
+if(COMMAND cmake_policy)
+    cmake_policy(SET CMP0003 NEW)
+endif(COMMAND cmake_policy)
+
 # project name and language
 project(APIViewer C CXX RC)
 
@@ -47,6 +51,6 @@ subdirs(TypeSystem)
 
 # executable
 add_executable(APIViewer WIN32 APIViewer.cpp APIViewer_res.rc)
-target_link_libraries(APIViewer comctl32 shlwapi)
+target_link_libraries(APIViewer comctl32 shlwapi TypeSystem)
 
 ##############################################################################

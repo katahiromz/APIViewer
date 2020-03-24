@@ -4885,10 +4885,11 @@ bool CR_NameScope::IsHandleType(CR_TypeID tid) const
         return false;
     tid = ResolvePointer(tid);
     tid = ResolveAlias(tid);
-    if (!IsStructType(tid))
+    if (tid == cr_invalid_id)
         return false;
-
     auto& type = LogType(tid);
+    if (!(type.m_flags & TF_STRUCT))
+        return false;
     auto& st = LogStruct(type.m_sub_id);
     if (st.m_members.size() != 1)
         return false;
