@@ -14,6 +14,7 @@
 #include <fstream> 
 #include <sstream>
 #include <cctype>
+#include <cmath>
 
 CR_TypeFlags CrNormalizeTypeFlags(CR_TypeFlags flags) {
     if (flags & TF_INT) {
