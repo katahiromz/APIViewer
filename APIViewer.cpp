@@ -86,6 +86,11 @@ std::string DoDumpFunction(const FUNCTION& fn)
         if (!first)
             ret += ", ";
         ret += fields[1];
+        if (fields.size() >= 3)
+        {
+            ret += " ";
+            ret += fields[2];
+        }
         first = false;
     }
     ret += ");\n\n";
