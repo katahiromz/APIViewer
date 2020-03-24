@@ -282,6 +282,7 @@ void DoUpdateList(HWND hwnd, ENTITY_TYPE iType, LPCWSTR pszText)
 
     if (pszText[0] == 0)
     {
+        SetWindowRedraw(GetDlgItem(hwnd, lst1), FALSE);
         switch (iType)
         {
         case ET_FUNCTION:
@@ -302,12 +303,16 @@ void DoUpdateList(HWND hwnd, ENTITY_TYPE iType, LPCWSTR pszText)
         {
             SendDlgItemMessageW(hwnd, lst1, LB_SETCURSEL, 0, 0);
         }
+
+        SetWindowRedraw(GetDlgItem(hwnd, lst1), TRUE);
+        InvalidateRect(GetDlgItem(hwnd, lst1), NULL, TRUE);
         return;
     }
 
     CHAR szTextA[128];
     WideCharToMultiByte(CP_ACP, 0, pszText, -1, szTextA, ARRAYSIZE(szTextA), NULL, NULL);
 
+    SetWindowRedraw(GetDlgItem(hwnd, lst1), FALSE);
     switch (iType)
     {
     case ET_FUNCTION:
@@ -334,6 +339,9 @@ void DoUpdateList(HWND hwnd, ENTITY_TYPE iType, LPCWSTR pszText)
     {
         SendDlgItemMessageW(hwnd, lst1, LB_SETCURSEL, 0, 0);
     }
+
+    SetWindowRedraw(GetDlgItem(hwnd, lst1), TRUE);
+    InvalidateRect(GetDlgItem(hwnd, lst1), NULL, TRUE);
 }
 
 void OnEdt1(HWND hwnd)
@@ -356,7 +364,6 @@ void OnCmb2(HWND hwnd)
     INT iType = (INT)SendDlgItemMessageW(hwnd, cmb2, CB_GETCURSEL, 0, 0);
 
     SetDlgItemTextW(hwnd, edt1, NULL);
-
     DoUpdateList(hwnd, (ENTITY_TYPE)iType, L"");
 }
 
