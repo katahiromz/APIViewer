@@ -4781,8 +4781,8 @@ bool CR_NameScope::SaveToFiles(
             out7 << name << "\t" << convention << "\t" << ret_name;
 
             for (auto& param : func.m_params) {
-                auto param_name = DecoratedTypeName(param.m_type_id);
-                out7 << "\t" << param_name;
+                auto param_type = DecoratedTypeName(param.m_type_id);
+                out7 << "\t" << param_type << ":" << param.m_name;
             }
 
             if (func.m_ellipsis)
@@ -4816,21 +4816,18 @@ std::string CR_NameScope::DecoratedTypeName(CR_TypeID tid) const
         }
     } else if (IsIntegralType(tid) || IsEnumType(tid)) {
         if (IsUnsignedType(tid)) {
-            if (SizeOfType(tid) <= 4)
-                ret += "u32:";
-            else
-                ret += "u64:";
+            auto size = SizeOfType(tid) * 8;
+            std::sprintf(buf, "u%u:", (int)size);
+            ret += buf;
         } else {
-            if (SizeOfType(tid) <= 4)
-                ret += "i32:";
-            else
-                ret += "i64:";
+            auto size = SizeOfType(tid) * 8;
+            std::sprintf(buf, "i%u:", (int)size);
+            ret += buf;
         }
     } else if (IsFloatingType(tid)) {
-        if (SizeOfType(tid) <= 4)
-            ret += "f32:";
-        else
-            ret += "f64:";
+        auto size = SizeOfType(tid) * 8;
+        std::sprintf(buf, "f%u:", (int)size);
+        ret += buf;
     } else {
         auto size = SizeOfType(tid) * 8;
         std::sprintf(buf, "r%u:", (int)size);
