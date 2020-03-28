@@ -5,14 +5,7 @@
 #include <vector>
 #include <map>
 #include "TypeSystem/TypeSystem.h"
-
-struct FUNCTION
-{
-    std::string name;
-    std::string convention;
-    std::string ret;
-    std::vector<std::string> params;
-};
+#include "TypeSystem/Misc.h"
 
 struct TYPE
 {
@@ -151,36 +144,6 @@ std::string DoDumpType(const TYPE& st)
     return ret;
 }
 
-BOOL GetWondersDirectory(LPWSTR pszPath, INT cchPath)
-{
-    WCHAR szDir[MAX_PATH], szPath[MAX_PATH];
-    GetModuleFileNameW(NULL, szDir, ARRAYSIZE(szDir));
-    PathRemoveFileSpecW(szDir);
-
-    lstrcpynW(szPath, szDir, ARRAYSIZE(szPath));
-    PathAppendW(szPath, L"WondersXP");
-    if (!PathIsDirectoryW(szPath))
-    {
-        lstrcpynW(szPath, szDir, ARRAYSIZE(szPath));
-        PathAppendW(szPath, L"..\\WondersXP");
-        if (!PathIsDirectoryW(szPath))
-        {
-            lstrcpynW(szPath, szDir, ARRAYSIZE(szPath));
-            PathAppendW(szPath, L"..\\..\\WondersXP");
-            if (!PathIsDirectoryW(szPath))
-            {
-                lstrcpynW(szPath, szDir, ARRAYSIZE(szPath));
-                PathAppendW(szPath, L"..\\..\\..\\WondersXP");
-                if (!PathIsDirectoryW(szPath))
-                    return FALSE;
-            }
-        }
-    }
-
-    lstrcpynW(pszPath, szPath, cchPath);
-    return TRUE;
-}
-
 BOOL DoLoadTypes(void)
 {
     s_types.clear();
@@ -203,38 +166,6 @@ BOOL DoLoadTypes(void)
     return TRUE;
 }
 
-BOOL DoLoadFunctions(LPCWSTR prefix, LPCWSTR suffix)
-{
-    std::wstring filename = prefix;
-    filename += L"functions";
-    filename += suffix;
-
-    FILE *fp = _wfopen(filename.c_str(), L"r");
-    if (!fp)
-        return FALSE;
-
-    char buf[512];
-    fgets(buf, ARRAYSIZE(buf), fp);
-    while (fgets(buf, ARRAYSIZE(buf), fp))
-    {
-        StrTrimA(buf, " \t\r\n");
-
-        FUNCTION fn;
-        split(fn.params, buf, '\t');
-        if (fn.params.size() < 3)
-            continue;
-
-        fn.name = fn.params[0];
-        fn.convention = fn.params[1];
-        fn.ret = fn.params[2];
-        fn.params.erase(fn.params.begin(), fn.params.begin() + 3);
-        s_functions.insert(std::make_pair(fn.name, fn));
-    }
-
-    fclose(fp);
-    return TRUE;
-}
-
 BOOL OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
 {
     WCHAR szPath[MAX_PATH];
@@ -252,7 +183,7 @@ BOOL OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
 #ifdef _WIN64
     s_pns = new CR_NameScope(std::make_shared<CR_ErrorInfo>(), true);
     if (!s_pns->LoadFromFiles(szPathA, "-cl-64-w.dat") ||
-        !DoLoadFunctions(szPath, L"-cl-64-w.dat") ||
+        !DoLoadFunctions(s_functions, szPath, L"-cl-64-w.dat") ||
         !DoLoadTypes())
 #else
     s_pns = new CR_NameScope(std::make_shared<CR_ErrorInfo>(), false);

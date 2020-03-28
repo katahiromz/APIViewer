@@ -1,3 +1,6 @@
 [submodule "WondersXP"]
 	path = WondersXP
 	url = https://github.com/katahiromz/WondersXP.git
+[submodule "TypeSystem"]
+	path = TypeSystem
+	url = https://github.com/katahiromz/TypeSystem.git
