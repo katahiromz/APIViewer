@@ -188,7 +188,7 @@ BOOL OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
 #else
     s_pns = new CR_NameScope(std::make_shared<CR_ErrorInfo>(), false);
     if (!s_pns->LoadFromFiles(szPathA, "-cl-32-w.dat") ||
-        !DoLoadFunctions(szPath, L"-cl-32-w.dat") ||
+        !DoLoadFunctions(s_functions, szPath, L"-cl-32-w.dat") ||
         !DoLoadTypes())
 #endif
     {

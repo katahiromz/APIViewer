@@ -51,6 +51,6 @@ subdirs(TypeSystem)
 
 # executable
 add_executable(APIViewer WIN32 APIViewer.cpp APIViewer_res.rc)
-target_link_libraries(APIViewer comctl32 shlwapi TypeSystem)
+target_link_libraries(APIViewer comctl32 shlwapi TypeSystem shlwapi)
 
 ##############################################################################
